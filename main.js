@@ -39,7 +39,7 @@
     const distance = story.offsetHeight - window.innerHeight;
     const y = story.offsetTop + distance * fraction;
     if (window.lenisInstance) window.lenisInstance.scrollTo(y, { force: true });
-    else window.scrollTo({ top: y, behavior: prefersReduced ? "auto" : "smooth" });
+    else window.scrollTo({ top: y, behavior: prefersReduced || isPhone ? "auto" : "smooth" });
   };
 
   document.querySelectorAll("[data-at]").forEach((link) => {
@@ -122,7 +122,7 @@
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Site 05 canvas context is unavailable.");
 
-  const stars = Array.from({ length: 140 }, () => ({
+  const stars = Array.from({ length: isPhone ? 56 : 140 }, () => ({
     x: Math.random(),
     y: Math.random(),
     r: Math.random() * 1.4 + 0.3,
@@ -134,7 +134,7 @@
   let time = 0;
 
   const resize = () => {
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    const ratio = Math.min(window.devicePixelRatio || 1, window.innerWidth < 980 ? 1.5 : 2);
     width = canvas.clientWidth;
     height = canvas.clientHeight;
     canvas.width = Math.max(1, Math.floor(width * ratio));
@@ -156,9 +156,10 @@
     context.beginPath();
     context.arc(cx, cy, radius, 0, Math.PI * 2);
     context.fill();
-    for (let i = 0; i < 240; i += 1) {
+    const spokes = width < 980 ? 64 : 240;
+    for (let i = 0; i < spokes; i += 1) {
       const angle = i * GOLD + time * 0.05;
-      const dist = Math.sqrt(i / 240) * radius;
+      const dist = Math.sqrt(i / spokes) * radius;
       const x = cx + Math.cos(angle) * dist;
       const y = cy + Math.sin(angle) * dist * 0.94;
       context.strokeStyle = "rgba(226, 236, 255, 0.22)";
@@ -253,8 +254,9 @@
     context.arc(cx, cy, radius, 0, Math.PI * 2);
     context.fill();
     context.strokeStyle = "rgba(220, 255, 230, 0.28)";
-    for (let i = 0; i < 90; i += 1) {
-      const angle = (i / 90) * Math.PI * 2 + time * 0.04;
+    const rays = width < 980 ? 36 : 90;
+    for (let i = 0; i < rays; i += 1) {
+      const angle = (i / rays) * Math.PI * 2 + time * 0.04;
       context.beginPath();
       context.moveTo(cx + Math.cos(angle) * radius * 0.28, cy + Math.sin(angle) * radius * 0.28);
       context.lineTo(cx + Math.cos(angle + 0.18) * radius * 0.9, cy + Math.sin(angle + 0.18) * radius * 0.9);
@@ -268,6 +270,11 @@
   };
 
   const frame = () => {
+    if (document.hidden) return;
+    if (isPhone) {
+      const distance = story.offsetHeight - window.innerHeight;
+      progress = distance <= 0 ? 0 : Math.min(1, Math.max(0, (window.scrollY - story.offsetTop) / distance));
+    }
     time += 0.016;
     const hero = band(progress, 0, 0.22);
     const orbit = band(progress, 0.12, 0.36);
@@ -292,16 +299,17 @@
     context.globalAlpha = 1;
 
     const narrow = width < 980;
-    const seedX = narrow ? width * 0.78 : width * (0.64 - orbit * 0.14);
-    const seedY = narrow ? height * 0.2 : height * 0.48;
+    const seedX = narrow ? width * 0.72 : width * (0.64 - orbit * 0.14);
+    const seedY = narrow ? height * 0.16 : height * 0.48;
     const seedR = Math.min(width, height) * (narrow ? 0.11 : 0.22 + orbit * 0.12);
     drawSeed(seedX, seedY, seedR, Math.max(hero, orbit * 0.85) * (1 - hops));
-    drawRings(width * 0.5, height * (narrow ? 0.34 : 0.46), Math.min(width, height) * (narrow ? 0.18 : 0.28), orbit);
+    drawRings(width * 0.5, height * (narrow ? 0.26 : 0.46), Math.min(width, height) * (narrow ? 0.16 : 0.28), orbit);
 
     if (hops > 0) {
       context.save();
       context.globalAlpha = hops;
-      for (let i = 0; i < 26; i += 1) {
+      const streaks = narrow ? 8 : 26;
+      for (let i = 0; i < streaks; i += 1) {
         const x = ((i * 97 + time * 40) % width);
         context.strokeStyle = "rgba(255,255,255,0.18)";
         context.beginPath();
@@ -321,8 +329,8 @@
       context.restore();
     }
 
-    drawLotus(width / 2, height * (narrow ? 0.3 : 0.46), lotus);
-    drawIris(width * 0.5, height * (narrow ? 0.62 : 0.5), Math.min(width, height) * (narrow ? 0.18 : 0.28), iris);
+    drawLotus(width / 2, height * (narrow ? 0.2 : 0.46), lotus);
+    drawIris(narrow ? width * 0.78 : width * 0.5, height * (narrow ? 0.2 : 0.5), Math.min(width, height) * (narrow ? 0.13 : 0.28), iris);
     applyProgress();
   };
 
@@ -336,7 +344,8 @@
   gsap.registerPlugin(ScrollTrigger);
   ScrollTrigger.config({ ignoreMobileResize: true });
 
-  if (!isPhone && window.Lenis) {
+  const coarse = window.matchMedia("(pointer: coarse)").matches;
+  if (!isPhone && !coarse && window.Lenis) {
     const lenis = new Lenis({ lerp: 0.1, smoothWheel: true });
     window.lenisInstance = lenis;
     lenis.on("scroll", ScrollTrigger.update);
@@ -349,10 +358,17 @@
     start: "top top",
     end: "bottom bottom",
     onUpdate: (self) => {
+      if (isPhone) return;
       progress = self.progress;
       applyProgress();
     },
   });
   window.addEventListener("load", () => ScrollTrigger.refresh());
+  window.addEventListener("orientationchange", () => {
+    window.setTimeout(() => {
+      resize();
+      ScrollTrigger.refresh();
+    }, 200);
+  });
   gsap.ticker.add(frame);
 })();
